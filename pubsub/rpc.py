@@ -367,7 +367,7 @@ class RPCClient:
             start_time = asyncio.get_event_loop().time()
             while not future.done():
                 self.connection.channel.connection.process_data_events(time_limit=0.1)
-                await asyncio.sleep(0.01)
+                await asyncio.sleep(0.1)  # Reduced polling frequency for efficiency
                 
                 # Check timeout
                 if asyncio.get_event_loop().time() - start_time > timeout:
