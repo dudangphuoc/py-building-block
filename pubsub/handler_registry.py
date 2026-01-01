@@ -7,7 +7,7 @@ Supports wildcard patterns for flexible event routing.
 
 import fnmatch
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import List, Dict
 
 from .event_base import Event, EventHandler
@@ -20,11 +20,7 @@ class HandlerInvocationResult:
     """Result of invoking handlers for an event."""
     success_count: int = 0
     failed_count: int = 0
-    errors: List[Dict[str, str]] = None
-    
-    def __post_init__(self):
-        if self.errors is None:
-            self.errors = []
+    errors: List[Dict[str, str]] = field(default_factory=list)
 
 
 class HandlerRegistry:

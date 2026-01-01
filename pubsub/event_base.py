@@ -35,13 +35,6 @@ class Event:
     timestamp: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
     version: str = "1.0"
     
-    def __post_init__(self):
-        """Initialize event_id and timestamp if not provided."""
-        if not self.event_id:
-            self.event_id = str(uuid4())
-        if not self.timestamp:
-            self.timestamp = datetime.now(timezone.utc).isoformat()
-    
     def get_routing_key(self) -> str:
         """
         Generate routing key for this event.
