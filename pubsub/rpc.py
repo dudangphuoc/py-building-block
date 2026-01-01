@@ -361,10 +361,18 @@ class RPCClient:
         
         # Wait for response with timeout
         try:
-            # Process responses in background
-            asyncio.create_task(self._process_responses())
+            # Process events synchronously to handle responses
+            # Note: In production, consider using aio-pika for fully async RabbitMQ
+            start_time = asyncio.get_event_loop().time()
+            while not future.done():
+                self.connection.channel.connection.process_data_events(time_limit=0.1)
+                await asyncio.sleep(0.01)
+                
+                # Check timeout
+                if asyncio.get_event_loop().time() - start_time > timeout:
+                    raise asyncio.TimeoutError()
             
-            response = await asyncio.wait_for(future, timeout=timeout)
+            response = future.result()
             
             if response.success:
                 logger.info(f"RPC call succeeded: {method} (ID: {request.request_id})")
@@ -377,11 +385,6 @@ class RPCClient:
             logger.error(f"RPC call timed out: {method} (ID: {request.request_id})")
             self._pending_requests.pop(request.request_id, None)
             raise TimeoutError(f"RPC call timed out after {timeout} seconds")
-    
-    async def _process_responses(self):
-        """Process responses in the background."""
-        if self.connection.channel:
-            self.connection.channel.connection.process_data_events(time_limit=0.1)
     
     def _handle_response(self, ch, method_frame, properties, body):
         """Handle incoming RPC response."""

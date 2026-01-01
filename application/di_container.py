@@ -182,17 +182,29 @@ class DIContainer:
             
             return cls(**kwargs)
             
-        except Exception as e:
+        except TypeError as e:
+            # More specific error for missing/incorrect parameters
             logger.warning(
                 f"Failed to auto-inject dependencies for {cls.__name__}: {e}. "
-                "Creating instance without dependencies."
+                f"Required parameters: {param_names}. "
+                "Attempting to create instance without dependencies."
             )
             # Fallback: try to create without dependencies
             try:
                 return cls()
-            except Exception as e2:
-                logger.error(f"Failed to create instance of {cls.__name__}: {e2}")
-                raise
+            except TypeError as e2:
+                logger.error(
+                    f"Failed to create instance of {cls.__name__}: {e2}. "
+                    "Class requires parameters that cannot be auto-injected. "
+                    "Please register dependencies or provide a factory function."
+                )
+                raise ValueError(
+                    f"Cannot create instance of {cls.__name__}: missing dependencies. "
+                    f"Required parameters: {param_names}"
+                ) from e2
+        except Exception as e:
+            logger.error(f"Unexpected error creating instance of {cls.__name__}: {e}")
+            raise
     
     def register_from_module(
         self,

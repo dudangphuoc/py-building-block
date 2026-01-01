@@ -293,8 +293,10 @@ async def run_client():
     client.setup()
     
     # Start processing responses in background
+    stop_event = threading.Event()
+    
     def process_responses():
-        while True:
+        while not stop_event.is_set():
             connection.channel.connection.process_data_events(time_limit=0.1)
             time.sleep(0.1)
     
@@ -394,6 +396,7 @@ async def run_client():
     except Exception as e:
         logger.error(f"Error in RPC client: {e}", exc_info=True)
     finally:
+        stop_event.set()  # Signal the thread to stop
         client.close()
         connection.close()
 
