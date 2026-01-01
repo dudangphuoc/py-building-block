@@ -1,343 +1,433 @@
-# Event-Driven Pub/Sub System with Python & RabbitMQ
+# Building Blocks for Event-Driven DDD Architecture
 
-A modular, reusable Event-Driven Pub/Sub system built with Python and RabbitMQ, following Building-Block architecture principles.
+A comprehensive Python framework for building event-driven, Domain-Driven Design (DDD) applications with:
+- **Event-Driven Pub/Sub** (RabbitMQ)
+- **Remote Procedure Call (RPC)** for cross-platform communication
+- **DDD Building Blocks** (Entity, Repository, Unit of Work, Event Bus)
+- **Dependency Injection** with auto-registration
 
-## Features
+## 🎯 Features
 
-- **Modular Architecture**: Each component (connection, events, handlers, publisher, subscriber) is independent and reusable
-- **Pattern Matching**: Flexible wildcard-based routing with fnmatch support
-- **Thread-Safe Design**: Separate connections for publisher and consumer to avoid Pika thread-safety issues
-- **Error Handling**: Comprehensive error handling with handler isolation and Dead Letter Queue support
-- **Async Support**: Async handler invocation with proper exception handling
-- **Type Safety**: Full type hints and protocols for better code quality
-- **Extensible**: Easy to add new event types and handlers
+### 1. Event-Driven Pub/Sub System
+- Modular, reusable components for RabbitMQ integration
+- Pattern matching with wildcard support
+- Thread-safe design
+- Async handler execution
 
-## Architecture
+### 2. RPC Support (Cross-Platform)
+- JSON-based RPC protocol
+- Works with any platform (Python, C#, Java, Go, etc.)
+- Request/Response pattern
+- Timeout handling
 
-The system follows a Building-Block architecture with these independent modules:
+### 3. DDD Building Blocks
+- **Entity**: Base class with domain event support
+- **Repository**: Abstract CRUD operations with in-memory implementation
+- **Unit of Work**: Transaction and event coordination
+- **Event Bus**: Domain event publishing
+- **DI Container**: Automatic dependency injection with assembly scanning
 
-1. **AMQP Connection** (`amqp_connection.py`): Manages RabbitMQ connections, channels, and basic AMQP operations
-2. **Event Base** (`event_base.py`): Defines Event class, EventHandler protocol, and EventSerializer
-3. **Handler Registry** (`handler_registry.py`): Manages handler registration and invocation with pattern matching
-4. **Publisher** (`publisher.py`): Publishes events to RabbitMQ exchange
-5. **Subscriber** (`subscriber.py`): Consumes events from queues and dispatches to handlers
-6. **Handlers** (`handlers.py`): Example business logic handlers
-7. **Events** (`events.py`): Predefined event types for different domains
+## 📦 Installation
 
-## Installation
-
-### Prerequisites
-
-- Python 3.8+
-- Docker and Docker Compose (for RabbitMQ)
-
-### Setup
-
-1. Install dependencies:
 ```bash
+# Install dependencies
 pip install -r requirements.txt
-```
 
-2. Start RabbitMQ:
-```bash
+# Start RabbitMQ
 docker-compose up -d
 ```
 
-3. Verify RabbitMQ is running:
-- AMQP: `localhost:5672`
-- Management UI: `http://localhost:15672` (guest/guest)
+## 🚀 Quick Start
 
-## Usage
+### Example 1: Order Management with DDD
 
-### Quick Start
+```python
+from application import Entity, DomainEvent, UnitOfWork, EventBus
 
-Run the example:
+# Define entity
+class Order(Entity):
+    def __init__(self, order_id: str, customer_id: str):
+        super().__init__()
+        self.id = order_id
+        self.customer_id = customer_id
+        
+        # Raise domain event
+        self.raise_event(DomainEvent(
+            aggregate_id=self.id,
+            event_type="OrderCreated",
+            data={"order_id": order_id}
+        ))
+
+# Use Unit of Work
+event_bus = EventBus()
+
+async with MyUnitOfWork(event_bus) as uow:
+    order = Order("ORD-001", "CUST-123")
+    uow.register_entity(order)
+    await uow.orders.add(order)
+    # Commit automatically collects and publishes events
+```
+
+Run full example:
 ```bash
-python main.py
+python -m samples.sample1_order_management
 ```
 
-This will:
-1. Connect to RabbitMQ
-2. Setup handlers for order and user events
-3. Publish example events
-4. Process them through registered handlers
-5. Log all activities
+### Example 2: RPC Communication
 
-### Creating Custom Events
-
+**Server:**
 ```python
-from pubsub.event_base import Event
-from pubsub.events import OrderCreatedEvent
+from pubsub.rpc import RPCServer
+from pubsub.amqp_connection import AMQPConnection, AMQPConfig
 
-# Using predefined event
-event = OrderCreatedEvent(
-    data={
-        "order_id": "ORD-123",
-        "customer_email": "customer@example.com",
-        "items": [{"product_id": "PROD-001", "quantity": 2}],
-        "total_amount": 99.99
-    }
-)
+# Define RPC method
+async def create_user(user_id: str, username: str, email: str) -> dict:
+    user = User(user_id, username, email)
+    await user_repository.add(user)
+    return {"success": True, "user_id": user_id}
 
-# Or create custom event
-event = Event(
-    domain="payment",
-    action="processed",
-    data={"payment_id": "PAY-456", "amount": 99.99}
-)
-```
-
-### Creating Custom Handlers
-
-```python
-from pubsub.event_base import Event
-
-class CustomHandler:
-    async def handle(self, event: Event) -> None:
-        # Your business logic here
-        print(f"Processing: {event.domain}.{event.action}")
-        # Do something with event.data
-```
-
-### Registering Handlers
-
-```python
-from pubsub.handler_registry import HandlerRegistry
-
-registry = HandlerRegistry()
-
-# Exact match
-registry.subscribe("order.created", OrderHandler())
-
-# Wildcard patterns
-registry.subscribe("order.*", AllOrdersHandler())      # All order events
-registry.subscribe("*.created", AllCreatedHandler())   # All created events
-registry.subscribe("*", LoggingHandler())              # All events
-```
-
-### Publishing Events
-
-```python
-from pubsub.amqp_connection import AMQPConfig, AMQPConnection
-from pubsub.publisher import EventPublisher
-
-# Setup connection
-config = AMQPConfig(host="localhost", port=5672)
-connection = AMQPConnection(config)
+# Start server
+connection = AMQPConnection(AMQPConfig(host="localhost"))
 connection.connect()
 
-# Declare exchange
-connection.declare_exchange("events", exchange_type="topic", durable=True)
-
-# Create publisher
-publisher = EventPublisher(connection, "events")
-
-# Publish event
-publisher.publish(event)
+server = RPCServer(connection, "user-service")
+server.register_method("create_user", create_user)
+server.setup()
+server.start()
 ```
 
-### Subscribing to Events
+**Client:**
+```python
+from pubsub.rpc import RPCClient
+
+client = RPCClient(connection)
+client.setup()
+
+# Call remote method
+result = await client.call(
+    method="create_user",
+    params={"user_id": "001", "username": "alice", "email": "alice@example.com"},
+    routing_key="user-service"
+)
+print(result)  # {"success": True, "user_id": "001"}
+```
+
+Run full example:
+```bash
+# Terminal 1 - Start server
+python -m samples.sample2_rpc_user_service server
+
+# Terminal 2 - Run client
+python -m samples.sample2_rpc_user_service client
+```
+
+## 📚 Architecture
+
+### Module Structure
+
+```
+py-building-block/
+├── pubsub/                    # Event-Driven Pub/Sub
+│   ├── amqp_connection.py    # RabbitMQ connection management
+│   ├── event_base.py         # Event and EventHandler protocol
+│   ├── handler_registry.py   # Pattern matching & handler invocation
+│   ├── publisher.py          # Event publisher
+│   ├── subscriber.py         # Event subscriber
+│   ├── rpc.py               # RPC Server & Client
+│   └── events.py            # Example event types
+│
+├── application/              # DDD Building Blocks
+│   ├── entity.py            # Entity base with domain events
+│   ├── repository.py        # Repository pattern (abstract + in-memory)
+│   ├── unit_of_work.py     # Unit of Work pattern
+│   ├── event_bus.py        # Event Bus for domain events
+│   └── di_container.py     # Dependency Injection container
+│
+├── samples/                 # Sample applications
+│   ├── sample1_order_management.py
+│   └── sample2_rpc_user_service.py
+│
+├── tests/                   # Unit tests (62 tests)
+└── main.py                 # Integration example
+```
+
+## 🧱 DDD Building Blocks
+
+### Entity
+
+Base class for domain entities with event support:
 
 ```python
-from pubsub.subscriber import EventSubscriber, QueueConfig
+from application import Entity, DomainEvent
 
-# Create subscriber
-subscriber = EventSubscriber(
-    connection=connection,
-    queue_name="my-service-queue",
-    handler_registry=registry,
-    exchange_name="events",
-    queue_config=QueueConfig(durable=True),
-    prefetch_count=1
-)
-
-# Setup queue with routing pattern
-subscriber.setup_queue(routing_key="#")  # Receive all events
-
-# Start consuming (blocking call)
-subscriber.start_consuming()
+class Order(Entity):
+    def __init__(self, order_id: str):
+        super().__init__()
+        self.id = order_id
+        self.items = []
+    
+    def add_item(self, item):
+        self.items.append(item)
+        self.raise_event(DomainEvent(
+            aggregate_id=self.id,
+            event_type="OrderItemAdded",
+            data={"item": item}
+        ))
 ```
 
-## Testing
+### Repository
 
-Run tests:
-```bash
-pytest tests/
+Abstract repository with CRUD operations:
+
+```python
+from application import Repository
+from application.repository import InMemoryRepository
+
+class OrderRepository(InMemoryRepository[Order]):
+    async def find_by_customer(self, customer_id: str):
+        return await self.find(customer_id=customer_id)
 ```
 
-Run tests with coverage:
-```bash
-pytest tests/ --cov=pubsub --cov-report=html
+### Unit of Work
+
+Manages transactions and domain events:
+
+```python
+from application import UnitOfWork, EventBus
+
+class OrderUnitOfWork(UnitOfWork):
+    def __init__(self, event_bus: EventBus):
+        super().__init__(event_bus)
+        self.orders = OrderRepository()
+    
+    async def _commit_transaction(self):
+        # Commit to database
+        pass
+    
+    async def _rollback_transaction(self):
+        # Rollback database
+        pass
 ```
 
-Run tests with verbose output:
+### Event Bus
+
+Publishes domain events to handlers:
+
+```python
+from application import EventBus, DomainEvent
+
+event_bus = EventBus()
+
+async def handle_order_created(event: DomainEvent):
+    print(f"Order created: {event.data}")
+
+event_bus.subscribe("OrderCreated", handle_order_created)
+await event_bus.publish(DomainEvent(event_type="OrderCreated", data={...}))
+```
+
+### Dependency Injection
+
+Automatic registration and resolution:
+
+```python
+from application import DIContainer
+
+container = DIContainer()
+
+# Manual registration
+container.register(EventBus, EventBus(), lifetime='singleton')
+container.register(OrderRepository, OrderRepository)
+
+# Automatic registration from module
+import my_repositories
+container.register_from_module(my_repositories, base_class=Repository)
+
+# Resolve
+repo = container.resolve(OrderRepository)
+```
+
+## 🔌 RPC (Remote Procedure Call)
+
+### Cross-Platform Communication
+
+RPC uses JSON for message format, enabling communication between:
+- Python ↔ C#
+- Python ↔ Java
+- Python ↔ Go
+- Any platform with RabbitMQ support
+
+### Protocol
+
+**Request:**
+```json
+{
+  "method": "create_user",
+  "params": {
+    "user_id": "001",
+    "username": "alice",
+    "email": "alice@example.com"
+  },
+  "request_id": "550e8400-e29b-41d4-a716-446655440000",
+  "timestamp": "2026-01-01T12:00:00Z",
+  "timeout": 30
+}
+```
+
+**Response:**
+```json
+{
+  "request_id": "550e8400-e29b-41d4-a716-446655440000",
+  "success": true,
+  "result": {
+    "user_id": "001",
+    "message": "User created"
+  },
+  "error": null,
+  "timestamp": "2026-01-01T12:00:01Z"
+}
+```
+
+## 🧪 Testing
+
 ```bash
+# Run all tests
 pytest tests/ -v
+
+# Run with coverage
+pytest tests/ --cov=application --cov=pubsub --cov-report=html
+
+# Test results: 62 tests passed
 ```
 
-## Configuration
+## 📖 Samples
 
-### AMQP Configuration
+### Sample 1: Order Management System
+
+Demonstrates:
+- Entity with domain events
+- Repository pattern
+- Unit of Work
+- Event Bus
+- Automatic event publishing on commit
+
+```bash
+python -m samples.sample1_order_management
+```
+
+### Sample 2: User Service with RPC
+
+Demonstrates:
+- RPC Server exposing methods
+- RPC Client making remote calls
+- Cross-platform JSON communication
+- Integration with DDD patterns
+
+```bash
+# Start server
+python -m samples.sample2_rpc_user_service server
+
+# Run client (in another terminal)
+python -m samples.sample2_rpc_user_service client
+```
+
+## 🎓 Key Concepts
+
+### Domain Events vs Integration Events
+
+**Domain Events** (application layer):
+- Internal to the bounded context
+- Published via Event Bus
+- Handled synchronously during transaction
+
+**Integration Events** (pubsub layer):
+- Cross-bounded context communication
+- Published to RabbitMQ
+- Handled asynchronously
+
+### Unit of Work Pattern
+
+The Unit of Work:
+1. Tracks entities during a transaction
+2. Collects domain events from entities
+3. Commits the transaction
+4. Publishes events only if commit succeeds
+5. Clears events from entities
+
+```python
+async with OrderUnitOfWork(event_bus) as uow:
+    order = Order("ORD-001", "CUST-123")
+    uow.register_entity(order)  # Track entity
+    await uow.orders.add(order)
+    # Auto-commits and publishes events on exit
+```
+
+### Dependency Injection
+
+Automatic registration similar to C# Assembly scanning:
+
+```python
+# C# equivalent:
+# Assembly[] assemblies = AppDomain.CurrentDomain.GetAssemblies();
+# services.RegisterAssemblyTypes(assemblies);
+
+# Python:
+import my_repositories
+container.register_from_module(my_repositories, base_class=Repository)
+```
+
+## 🔧 Configuration
+
+### RabbitMQ Configuration
 
 ```python
 from pubsub.amqp_connection import AMQPConfig
 
 config = AMQPConfig(
-    host="localhost",           # RabbitMQ host
-    port=5672,                  # AMQP port
-    username="guest",           # Username
-    password="guest",           # Password
-    virtual_host="/",           # Virtual host
-    connection_attempts=3,      # Retry attempts
-    retry_delay=5,              # Delay between retries (seconds)
-    heartbeat=600,              # Heartbeat interval (seconds)
-    blocked_connection_timeout=300  # Timeout for blocked connections
+    host="localhost",
+    port=5672,
+    username="guest",
+    password="guest",
+    virtual_host="/",
+    connection_attempts=3,
+    retry_delay=5
 )
 ```
 
-### Queue Configuration
+### RPC Configuration
 
 ```python
-from pubsub.subscriber import QueueConfig
+# Server
+server = RPCServer(
+    connection=connection,
+    queue_name="my-service",     # Unique per service
+    exchange_name="rpc_exchange"
+)
 
-queue_config = QueueConfig(
-    durable=True,        # Queue survives broker restart
-    exclusive=False,     # Queue can be used by multiple connections
-    auto_delete=False,   # Queue is not deleted when unused
-    arguments=None       # Optional queue arguments (e.g., for DLQ)
+# Client
+client = RPCClient(
+    connection=connection,
+    exchange_name="rpc_exchange"
 )
 ```
 
-## Important Notes
+## 🚨 Best Practices
 
-### Thread Safety
+1. **Use separate connections** for publisher and consumer (thread safety)
+2. **Register entities with UoW** to track domain events
+3. **Always use async/await** for handlers and repository methods
+4. **Use DI container** for managing dependencies
+5. **Keep domain events internal**, use integration events for external communication
+6. **Make RPC methods idempotent** for reliability
+7. **Use JSON-serializable types** for cross-platform compatibility
 
-Pika's `BlockingConnection` is **NOT thread-safe** except for `add_callback_threadsafe()`. 
-
-**Solution**: Use separate connections for publisher and consumer threads:
-
-```python
-# Create two connections
-publisher_connection = AMQPConnection(config)
-subscriber_connection = AMQPConnection(config)
-
-publisher_connection.connect()
-subscriber_connection.connect()
-```
-
-For fully async applications, consider using [aio-pika](https://github.com/mosquito/aio-pika).
-
-### Message Acknowledgment
-
-The subscriber automatically handles message acknowledgment:
-- **All handlers succeed**: Message is acknowledged (`basic_ack`)
-- **Any handler fails**: Message is rejected without requeue (`basic_nack` with `requeue=False`)
-
-For retry logic, configure a Dead Letter Queue (DLQ) in RabbitMQ.
-
-### Queue Naming
-
-Each service should use a **unique queue name** to avoid sharing queues unintentionally. Use service-specific prefixes:
-
-```python
-subscriber = EventSubscriber(
-    queue_name="order-service-queue",  # Unique per service
-    # ...
-)
-```
-
-### Serialization
-
-All data in `Event.data` must be **JSON-serializable**:
-- ✅ Strings, numbers, lists, dicts, booleans, None
-- ❌ datetime objects, custom classes, functions
-
-Convert non-serializable objects before creating events:
-
-```python
-from datetime import datetime
-
-# ❌ This will fail
-event = Event(domain="test", action="test", data={"time": datetime.now()})
-
-# ✅ This works
-event = Event(domain="test", action="test", data={"time": datetime.now().isoformat()})
-```
-
-## Examples
-
-### E-commerce Order Flow
-
-```python
-# 1. Order Created
-order_event = OrderCreatedEvent(data={
-    "order_id": "ORD-123",
-    "customer_email": "customer@example.com",
-    "items": [{"product_id": "PROD-001", "quantity": 2}]
-})
-publisher.publish(order_event)
-
-# Handlers triggered:
-# - SendEmailHandler: Send order confirmation email
-# - UpdateInventoryHandler: Reduce stock
-# - LogAnalyticsHandler: Track order metrics
-
-# 2. Payment Processed
-payment_event = OrderPaidEvent(data={
-    "order_id": "ORD-123",
-    "payment_id": "PAY-456",
-    "amount": 99.99
-})
-publisher.publish(payment_event)
-
-# Handlers triggered:
-# - SendEmailHandler: Send payment confirmation
-# - LogAnalyticsHandler: Track payment metrics
-```
-
-## Best Practices
-
-1. **One Connection Per Thread**: Always use separate connections for different threads
-2. **Error Handling**: Implement proper error handling in handlers to prevent cascading failures
-3. **Dead Letter Queues**: Configure DLQs for failed messages to prevent loss
-4. **Monitoring**: Use RabbitMQ Management UI to monitor queues and exchanges
-5. **Logging**: Enable appropriate logging levels to track event flow
-6. **Prefetch Count**: Set appropriate `prefetch_count` to control consumer load
-7. **Queue Durability**: Use durable queues and persistent messages for reliability
-8. **Version Events**: Use the `version` field for schema evolution
-
-## Troubleshooting
-
-### Connection Issues
-
-```bash
-# Check if RabbitMQ is running
-docker ps | grep rabbitmq
-
-# Check RabbitMQ logs
-docker logs rabbitmq
-
-# Restart RabbitMQ
-docker-compose restart
-```
-
-### Thread Safety Issues
-
-If you see errors like "connection closed" or "channel closed unexpectedly":
-- Ensure you're using separate connections for publisher and consumer
-- Don't share connections across threads
-
-### Messages Not Being Consumed
-
-- Verify queue is properly bound to exchange
-- Check routing keys match patterns
-- Ensure subscriber is running
-- Check RabbitMQ Management UI for queue status
-
-## License
+## 📝 License
 
 MIT License
 
-## Contributing
+## 🤝 Contributing
 
 Contributions are welcome! Please feel free to submit issues or pull requests.
+
+## 📧 Support
+
+For questions or issues, please open a GitHub issue.
