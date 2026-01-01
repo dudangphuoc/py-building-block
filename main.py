@@ -11,10 +11,28 @@ import time
 
 from pubsub.amqp_connection import AMQPConfig, AMQPConnection
 from pubsub.handler_registry import HandlerRegistry
-from pubsub.handlers import SendEmailHandler, UpdateInventoryHandler, LogAnalyticsHandler
 from pubsub.publisher import EventPublisher
 from pubsub.subscriber import EventSubscriber, QueueConfig
 from pubsub.events import OrderCreatedEvent, OrderPaidEvent, UserRegisteredEvent
+from pubsub.event_base import Event
+
+
+# Define simple inline handlers
+class SimpleLogHandler:
+    """Simple handler that logs events."""
+    async def handle(self, event: Event) -> None:
+        logger.info(f"[SimpleLogHandler] Processing {event.domain}.{event.action} - ID: {event.event_id}")
+        logger.info(f"[SimpleLogHandler] Event data: {event.data}")
+
+
+class OrderHandler:
+    """Handler specifically for order events."""
+    async def handle(self, event: Event) -> None:
+        logger.info(f"[OrderHandler] Processing order event: {event.action}")
+        if event.action == "created":
+            logger.info(f"[OrderHandler] New order: {event.data.get('order_id')}")
+        elif event.action == "paid":
+            logger.info(f"[OrderHandler] Order paid: {event.data.get('order_id')}")
 
 # Configure logging
 logging.basicConfig(
@@ -70,11 +88,9 @@ def main():
         registry = HandlerRegistry()
         
         # Register handlers with patterns
-        registry.subscribe("order.*", SendEmailHandler())
-        registry.subscribe("order.*", UpdateInventoryHandler())
-        registry.subscribe("order.*", LogAnalyticsHandler())
-        registry.subscribe("user.*", SendEmailHandler())
-        registry.subscribe("user.*", LogAnalyticsHandler())
+        registry.subscribe("order.*", SimpleLogHandler())
+        registry.subscribe("order.*", OrderHandler())
+        registry.subscribe("user.*", SimpleLogHandler())
         
         # Step 3: Setup Publisher
         logger.info("=== Setting up Publisher ===")
