@@ -7,13 +7,15 @@ and platforms (Python, C#, Java, Go, etc.).
 Uses JSON-based message format for cross-platform compatibility.
 """
 
+import asyncio
 import json
 import logging
 import uuid
 from dataclasses import dataclass, field, asdict
 from datetime import datetime, timezone
 from typing import Any, Callable, Dict, Optional
-import asyncio
+
+import pika
 
 from .amqp_connection import AMQPConnection
 from .event_base import Event
@@ -347,7 +349,6 @@ class RPCClient:
         self._pending_requests[request.request_id] = future
         
         # Send request
-        import pika
         self.connection.channel.basic_publish(
             exchange=self.exchange_name,
             routing_key=routing_key,

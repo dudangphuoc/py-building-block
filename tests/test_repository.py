@@ -2,6 +2,7 @@
 Tests for Repository
 """
 
+import asyncio
 import pytest
 
 from application.entity import Entity, DomainEvent
@@ -141,7 +142,6 @@ class TestInMemoryRepository:
         repo = InMemoryRepository[TestEntity]()
         
         # Use asyncio.run for async operations in sync test
-        import asyncio
         asyncio.run(repo.add(TestEntity("1", "test")))
         asyncio.run(repo.add(TestEntity("2", "test")))
         

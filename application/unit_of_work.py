@@ -194,14 +194,11 @@ class InMemoryUnitOfWork(UnitOfWork):
     def __init__(self, event_bus: Optional[EventBus] = None):
         """Initialize in-memory unit of work."""
         super().__init__(event_bus)
-        self._transaction_active = False
     
     async def _commit_transaction(self) -> None:
         """Simulate committing a transaction."""
         logger.debug("InMemoryUnitOfWork: Committing transaction")
-        self._transaction_active = False
     
     async def _rollback_transaction(self) -> None:
         """Simulate rolling back a transaction."""
         logger.debug("InMemoryUnitOfWork: Rolling back transaction")
-        self._transaction_active = False
